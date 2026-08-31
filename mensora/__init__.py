@@ -1,2 +1,1 @@
 """Package principal de Mensora."""
-

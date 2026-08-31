@@ -109,4 +109,3 @@ def calculer_totaux(operations):
 
     reste = total_revenu - total_depense
     return total_revenu, total_depense, reste, total_categorie
-
