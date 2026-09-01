@@ -5,6 +5,7 @@ import unittest
 from decimal import Decimal
 
 from mensora.stockage import (
+    ajouter_log_audit,
     ajouter_operation,
     convertir_centimes_en_montant,
     convertir_montant_en_centimes,
@@ -279,6 +280,282 @@ class OuvertureConnexionTests(unittest.TestCase):
             },
         )
         connexion.close()    
+
+    def test_initialiser_base_cree_table_audit_logs(self):
+        connexion = ouvrir_connexion(":memory:")
+        initialiser_base(connexion)
+
+        table = connexion.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'audit_logs'
+            """
+        ).fetchone()
+
+        self.assertEqual(table, ("audit_logs",))
+
+        connexion.close()
+
+    def test_table_audit_logs_contient_colonnes_attendues(self):
+        connexion = ouvrir_connexion(":memory:")
+        initialiser_base(connexion)
+
+        informations = connexion.execute(
+            "PRAGMA table_info(audit_logs)"
+        ).fetchall()
+
+        noms_colonnes = [information[1] for information in informations]
+
+        self.assertEqual(
+            noms_colonnes,
+            [
+                "id",
+                "operation_id",
+                "action",
+                "date_action",
+                "ancienne_date",
+                "ancien_type",
+                "ancienne_categorie",
+                "ancien_montant_centimes",
+                "ancien_detail",
+                "nouvelle_date",
+                "nouveau_type",
+                "nouvelle_categorie",
+                "nouveau_montant_centimes",
+                "nouveau_detail",
+            ],
+        )
+
+        connexion.close()
+
+    def test_ajouter_log_audit_enregistre_modification(self):
+        connexion = ouvrir_connexion(":memory:")
+        initialiser_base(connexion)
+
+        ancienne_operation = {
+            "date": "10/08/2026",
+            "type": "depense",
+            "categorie": "Courses",
+            "montant": Decimal("10.50"),
+            "detail": "",
+        }
+
+        nouvelle_operation = {
+            "date": "11/08/2026",
+            "type": "depense",
+            "categorie": "Courses",
+            "montant": Decimal("20.00"),
+            "detail": "",
+        }
+
+        ajouter_log_audit(
+            connexion,
+            1,
+            "modification",
+            ancienne_operation,
+            nouvelle_operation,
+        )
+        ligne = connexion.execute(
+            """
+            SELECT
+                operation_id,
+                action,
+                ancienne_date,
+                ancien_montant_centimes,
+                nouvelle_date,
+                nouveau_montant_centimes
+            FROM audit_logs
+            """
+        ).fetchone()
+        self.assertEqual(
+            ligne,
+            (
+                1,
+                "modification",
+                "10/08/2026",
+                1050,
+                "11/08/2026",
+                2000,
+            ),
+        )
+        connexion.close()
+
+    def test_ajouter_log_audit_enregistre_suppression(self):
+        connexion = ouvrir_connexion(":memory:")
+        initialiser_base(connexion)
+
+        ancienne_operation = {
+            "date": "10/08/2026",
+            "type": "depense",
+            "categorie": "Courses",
+            "montant": Decimal("10.50"),
+            "detail": "",
+        }
+
+        ajouter_log_audit(
+            connexion,
+            1,
+            "suppression",
+            ancienne_operation,
+            None,
+        )
+        ligne = connexion.execute(
+            """
+            SELECT
+                operation_id,
+                action,
+                ancienne_date,
+                ancien_montant_centimes,
+                nouvelle_date,
+                nouveau_montant_centimes
+            FROM audit_logs
+            """
+        ).fetchone()
+        self.assertEqual(
+            ligne,
+            (
+                1,
+                "suppression",
+                "10/08/2026",
+                1050,
+                None,
+                None,
+            ),
+        )
+        connexion.close()
+
+    def test_modifier_operation_enregistre_log_audit(self):
+        connexion = ouvrir_connexion(":memory:")
+        initialiser_base(connexion)
+
+        operation = {
+            "date": "10/08/2026",
+            "type": "depense",
+            "categorie": "Courses",
+            "montant": Decimal("10.50"),
+            "detail": "",
+        }
+
+        operation_id = ajouter_operation(connexion, operation)
+
+        nouvelle_operation = {
+            "date": "11/08/2026",
+            "type": "depense",
+            "categorie": "Courses",
+            "montant": Decimal("20.00"),
+            "detail": "",
+        }
+
+        modifier_operation(
+            connexion,
+            operation_id,
+            nouvelle_operation,
+        )
+        audit_log = connexion.execute(
+            """
+            SELECT
+                operation_id,
+                action,
+                ancienne_date,
+                ancien_montant_centimes,
+                nouvelle_date,
+                nouveau_montant_centimes
+            FROM audit_logs
+            WHERE operation_id = ?
+            """,
+            (operation_id,),
+        ).fetchone()
+        self.assertEqual(
+            audit_log,
+            (
+                operation_id,
+                "modification",
+                "10/08/2026",
+                1050,
+                "11/08/2026",
+                2000,
+            ),
+        )
+        connexion.close()
+
+    def supprimer_operation(connexion, operation_id):
+        """Supprimer une opération existante de la base de données."""
+
+        ligne = connexion.execute(
+            """
+            SELECT id, date, type, categorie, montant_centimes, detail
+            FROM operations
+            WHERE id = ?
+            """,
+            (operation_id,),
+        ).fetchone()
+
+        if ligne is None:
+            raise ValueError(
+                f"Aucune opération trouvée avec l'ID {operation_id}."
+            )
+
+        ancienne_operation = ligne_vers_operation(ligne)
+
+        cursor = connexion.cursor()
+        cursor.execute(
+            "DELETE FROM operations WHERE id = ?",
+            (operation_id,),
+        )
+
+        ajouter_log_audit(
+            connexion,
+            operation_id,
+            "suppression",
+            ancienne_operation,
+            None,
+        )
+
+        connexion.commit()
+        
+    def test_supprimer_operation_enregistre_log_audit(self):
+        connexion = ouvrir_connexion(":memory:")
+        initialiser_base(connexion)
+
+        operation = {
+            "date": "10/08/2026",
+            "type": "depense",
+            "categorie": "Courses",
+            "montant": Decimal("10.50"),
+            "detail": "",
+        }
+
+        operation_id = ajouter_operation(connexion, operation)
+
+        supprimer_operation(connexion, operation_id)
+
+        audit_log = connexion.execute(
+            """
+            SELECT
+                operation_id,
+                action,
+                ancienne_date,
+                ancien_montant_centimes,
+                nouvelle_date,
+                nouveau_montant_centimes
+            FROM audit_logs
+            WHERE operation_id = ?
+            """,
+            (operation_id,),
+        ).fetchone()
+        self.assertEqual(
+            audit_log,
+            (
+                operation_id,
+                "suppression",
+                "10/08/2026",
+                1050,
+                None,
+                None,
+            ),
+        )
+        connexion.close()
 
 class ConversionMontantTests(unittest.TestCase):
     def test_convertir_montant_en_centimes(self):

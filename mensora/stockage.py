@@ -1,8 +1,19 @@
-"""Accès à la base de données SQLite locale de Mensora."""
+"""Accès à la base de données SQLite locale de Mensora.
 
-from decimal import Decimal
+Ce module porte une responsabilité unique : persister les opérations financières
+et leur journal d'audit. Les règles métier restent dans ``mensora.metier``.
+"""
+
 import sqlite3
+from datetime import datetime
+from decimal import Decimal
+
 from mensora.metier import normaliser_montant, valider_operation
+
+
+# ---------------------------------------------------------------------------
+# Connexion et schéma
+# ---------------------------------------------------------------------------
 
 
 def ouvrir_connexion(chemin_base):
@@ -25,58 +36,47 @@ def initialiser_base(connexion):
         """
     )
 
+    # Le journal est séparé des opérations : supprimer une opération ne doit
+    # jamais supprimer la trace de ce qui a été modifié ou supprimé.
+    connexion.execute(
+        """
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            operation_id INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            date_action TEXT NOT NULL,
+            ancienne_date TEXT NOT NULL,
+            ancien_type TEXT NOT NULL,
+            ancienne_categorie TEXT NOT NULL,
+            ancien_montant_centimes INTEGER NOT NULL,
+            ancien_detail TEXT NOT NULL DEFAULT '',
+            nouvelle_date TEXT,
+            nouveau_type TEXT,
+            nouvelle_categorie TEXT,
+            nouveau_montant_centimes INTEGER,
+            nouveau_detail TEXT
+        )
+        """
+    )
+
+
+# ---------------------------------------------------------------------------
+# Conversion monétaire
+# ---------------------------------------------------------------------------
+
 
 def convertir_montant_en_centimes(montant):
     """Convertir un montant Decimal normalisé en nombre entier de centimes."""
     return int(montant * 100)
 
+
 def convertir_centimes_en_montant(centimes):
     """Convertir un nombre entier de centimes en montant Decimal normalisé."""
     return normaliser_montant(Decimal(centimes) / 100)
 
-def ajouter_operation(connexion, operation):
-    """Ajouter une opération à la base de données."""
-    # Valider l'opération avant de l'ajouter
-    valide, message = valider_operation(operation)
-    if not valide:
-        raise ValueError(f"Opération invalide: {message}")
-    
-    montant_centimes = convertir_montant_en_centimes(normaliser_montant(operation["montant"]))
-    connexion_cursor = connexion.cursor()
-    connexion_cursor.execute(
-        """
-        INSERT INTO operations (date, type, categorie, montant_centimes, detail)
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        (
-            operation["date"],
-            operation["type"],
-            operation["categorie"],
-            montant_centimes,
-            operation.get("detail", "")
-        )
-    )
-    connexion.commit()
-    return connexion_cursor.lastrowid  # Retourne l'ID de la dernière opération insérée
-
-def lister_operations(connexion):
-    """Lister toutes les opérations de la base de données."""
-    cursor = connexion.cursor()
-    cursor.execute("""
-        SELECT id, date, type, categorie, montant_centimes, detail
-        FROM operations
-        ORDER BY id
-    """)
-    lignes= cursor.fetchall()
-    operations = []
-
-    for ligne in lignes:
-        operation = ligne_vers_operation(ligne)
-        operations.append(operation)
-    return operations
 
 def ligne_vers_operation(ligne):
-    """Convertir une ligne de la base de données en dictionnaire d'opération."""
+    """Convertir une ligne SQLite en dictionnaire d'opération métier."""
     return {
         "id": ligne[0],
         "date": ligne[1],
@@ -86,38 +86,223 @@ def ligne_vers_operation(ligne):
         "detail": ligne[5],
     }
 
+
+# ---------------------------------------------------------------------------
+# CRUD des opérations
+# ---------------------------------------------------------------------------
+
+
+def ajouter_operation(connexion, operation):
+    """Valider puis ajouter une opération et retourner son identifiant SQLite."""
+    valide, message = valider_operation(operation)
+    if not valide:
+        raise ValueError(f"Opération invalide: {message}")
+
+    montant_centimes = convertir_montant_en_centimes(
+        normaliser_montant(operation["montant"])
+    )
+
+    cursor = connexion.cursor()
+    cursor.execute(
+        """
+        INSERT INTO operations (date, type, categorie, montant_centimes, detail)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            operation["date"],
+            operation["type"],
+            operation["categorie"],
+            montant_centimes,
+            operation.get("detail", ""),
+        ),
+    )
+    connexion.commit()
+    return cursor.lastrowid
+
+
+def lister_operations(connexion):
+    """Lister toutes les opérations, converties en dictionnaires métier."""
+    cursor = connexion.cursor()
+    cursor.execute(
+        """
+        SELECT id, date, type, categorie, montant_centimes, detail
+        FROM operations
+        ORDER BY id
+        """
+    )
+
+    return [ligne_vers_operation(ligne) for ligne in cursor.fetchall()]
+
+
 def modifier_operation(connexion, operation_id, nouvelle_operation):
-    """Modifier une opération existante dans la base de données."""
-    # Valider la nouvelle opération avant de la modifier
+    """Modifier une opération et journaliser son état avant/après."""
     valide, message = valider_operation(nouvelle_operation)
     if not valide:
         raise ValueError(f"Nouvelle opération invalide: {message}")
 
-    montant_centimes = convertir_montant_en_centimes(normaliser_montant(nouvelle_operation["montant"]))
-    cursor = connexion.cursor()
-    cursor.execute(
+    # L'état actuel doit être capturé avant l'UPDATE : après modification,
+    # SQLite ne permettrait plus de reconstruire fidèlement l'ancien état.
+    ligne = connexion.execute(
         """
-        UPDATE operations
-        SET date = ?, type = ?, categorie = ?, montant_centimes = ?, detail = ?
+        SELECT id, date, type, categorie, montant_centimes, detail
+        FROM operations
         WHERE id = ?
         """,
-        (
-            nouvelle_operation["date"],
-            nouvelle_operation["type"],
-            nouvelle_operation["categorie"],
-            montant_centimes,
-            nouvelle_operation.get("detail", ""),
-            operation_id
-        )
-    )
-    if cursor.rowcount == 0:
+        (operation_id,),
+    ).fetchone()
+
+    if ligne is None:
         raise ValueError(f"Aucune opération trouvée avec l'ID {operation_id}.")
-    connexion.commit()
+
+    ancienne_operation = ligne_vers_operation(ligne)
+    montant_centimes = convertir_montant_en_centimes(
+        normaliser_montant(nouvelle_operation["montant"])
+    )
+
+    # UPDATE + audit forment une seule transaction métier. Si le journal
+    # échoue, la modification est annulée afin d'éviter un historique incomplet.
+    try:
+        cursor = connexion.cursor()
+        cursor.execute(
+            """
+            UPDATE operations
+            SET date = ?, type = ?, categorie = ?, montant_centimes = ?, detail = ?
+            WHERE id = ?
+            """,
+            (
+                nouvelle_operation["date"],
+                nouvelle_operation["type"],
+                nouvelle_operation["categorie"],
+                montant_centimes,
+                nouvelle_operation.get("detail", ""),
+                operation_id,
+            ),
+        )
+
+        if cursor.rowcount == 0:
+            raise ValueError(f"Aucune opération trouvée avec l'ID {operation_id}.")
+
+        ajouter_log_audit(
+            connexion,
+            operation_id,
+            "modification",
+            ancienne_operation,
+            nouvelle_operation,
+        )
+        connexion.commit()
+    except Exception:
+        connexion.rollback()
+        raise
+
 
 def supprimer_operation(connexion, operation_id):
-    """Supprimer une opération existante de la base de données."""
-    cursor = connexion.cursor()
-    cursor.execute("DELETE FROM operations WHERE id = ?", (operation_id,))
-    if cursor.rowcount == 0:
+    """Supprimer une opération tout en conservant sa trace dans l'audit."""
+    # IMPORTANT : on lit d'abord l'opération. Une fois DELETE exécuté, son état
+    # précédent n'existe plus dans la table ``operations``.
+    ligne = connexion.execute(
+        """
+        SELECT id, date, type, categorie, montant_centimes, detail
+        FROM operations
+        WHERE id = ?
+        """,
+        (operation_id,),
+    ).fetchone()
+
+    if ligne is None:
         raise ValueError(f"Aucune opération trouvée avec l'ID {operation_id}.")
-    connexion.commit()
+
+    ancienne_operation = ligne_vers_operation(ligne)
+
+    # DELETE + audit sont atomiques : soit les deux sont validés, soit aucun.
+    try:
+        cursor = connexion.cursor()
+        cursor.execute(
+            "DELETE FROM operations WHERE id = ?",
+            (operation_id,),
+        )
+
+        if cursor.rowcount == 0:
+            raise ValueError(f"Aucune opération trouvée avec l'ID {operation_id}.")
+
+        ajouter_log_audit(
+            connexion,
+            operation_id,
+            "suppression",
+            ancienne_operation,
+            None,
+        )
+        connexion.commit()
+    except Exception:
+        connexion.rollback()
+        raise
+
+
+# ---------------------------------------------------------------------------
+# Journal d'audit
+# ---------------------------------------------------------------------------
+
+
+def ajouter_log_audit(
+    connexion,
+    operation_id,
+    action,
+    ancienne_operation,
+    nouvelle_operation,
+):
+    """Ajouter une entrée dans le journal d'audit sans valider la transaction."""
+    date_action = datetime.now().isoformat(timespec="seconds")
+    ancien_montant_centimes = convertir_montant_en_centimes(
+        normaliser_montant(ancienne_operation["montant"])
+    )
+
+    if nouvelle_operation is not None:
+        nouvelle_date = nouvelle_operation["date"]
+        nouveau_type = nouvelle_operation["type"]
+        nouvelle_categorie = nouvelle_operation["categorie"]
+        nouveau_montant_centimes = convertir_montant_en_centimes(
+            normaliser_montant(nouvelle_operation["montant"])
+        )
+        nouveau_detail = nouvelle_operation.get("detail", "")
+    else:
+        # Une suppression n'a pas d'état "après" : SQLite stocke donc NULL.
+        nouvelle_date = None
+        nouveau_type = None
+        nouvelle_categorie = None
+        nouveau_montant_centimes = None
+        nouveau_detail = None
+
+    connexion.execute(
+        """
+        INSERT INTO audit_logs (
+            operation_id,
+            action,
+            date_action,
+            ancienne_date,
+            ancien_type,
+            ancienne_categorie,
+            ancien_montant_centimes,
+            ancien_detail,
+            nouvelle_date,
+            nouveau_type,
+            nouvelle_categorie,
+            nouveau_montant_centimes,
+            nouveau_detail
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            operation_id,
+            action,
+            date_action,
+            ancienne_operation["date"],
+            ancienne_operation["type"],
+            ancienne_operation["categorie"],
+            ancien_montant_centimes,
+            ancienne_operation.get("detail", ""),
+            nouvelle_date,
+            nouveau_type,
+            nouvelle_categorie,
+            nouveau_montant_centimes,
+            nouveau_detail,
+        ),
+    )
