@@ -307,6 +307,7 @@ def ajouter_log_audit(
         ),
     )
 
+
 def lister_operations_par_mois(connexion, annee, mois):
     """Lister les opérations correspondant à un mois et une année."""
 
@@ -325,10 +326,8 @@ def lister_operations_par_mois(connexion, annee, mois):
         ),
     )
 
-    return [
-        ligne_vers_operation(ligne)
-        for ligne in cursor.fetchall()
-    ]
+    return [ligne_vers_operation(ligne) for ligne in cursor.fetchall()]
+
 
 def lister_logs_audit_par_mois(connexion, annee, mois):
     """Lister les logs d'audit concernant un mois et une année."""
@@ -372,46 +371,8 @@ def lister_logs_audit_par_mois(connexion, annee, mois):
     )
     lignes = cursor.fetchall()
 
-    return [
-        ligne_vers_log_audit(ligne)
-        for ligne in lignes
-    ]
-    cursor.execute(
-        """
-        SELECT
-            id,
-            operation_id,
-            action,
-            date_action,
-            ancienne_date,
-            ancien_type,
-            ancienne_categorie,
-            ancien_montant_centimes,
-            ancien_detail,
-            nouvelle_date,
-            nouveau_type,
-            nouvelle_categorie,
-            nouveau_montant_centimes,
-            nouveau_detail
-        FROM audit_logs
-        WHERE (
-            substr(ancienne_date, 7, 4) = ?
-            AND substr(ancienne_date, 4, 2) = ?
-        )
-        OR (
-            nouvelle_date IS NOT NULL
-            AND substr(nouvelle_date, 7, 4) = ?
-            AND substr(nouvelle_date, 4, 2) = ?
-        )
-        ORDER BY id
-        """,
-        (
-            str(annee),
-            f"{mois:02d}",
-            str(annee),
-            f"{mois:02d}",
-        ),
-    )
+    return [ligne_vers_log_audit(ligne) for ligne in lignes]
+
 
 def ligne_vers_log_audit(ligne):
     """Convertir une ligne SQLite en dictionnaire de log d'audit."""

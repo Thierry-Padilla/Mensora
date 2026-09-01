@@ -4,9 +4,9 @@ Mensora est une application Python locale destinée à simplifier la gestion d'u
 
 ## Statut
 
-Projet pédagogique en développement backend. Mensora n'est pas encore une application utilisable ni une V1 terminée.
+Projet pédagogique en développement. Le backend local est opérationnel et la première fenêtre mensuelle Tkinter est en construction. Mensora n'est pas encore une V1 terminée.
 
-Le premier socle métier est opérationnel et testé : validation d'une opération, calcul des revenus, calcul des dépenses, calcul du reste et regroupement séparé des revenus et des dépenses par catégorie.
+Le socle backend est opérationnel et testé : règles métier, SQLite, opérations CRUD, journal d'audit et lectures mensuelles.
 
 ## Fonctionnalités actuellement présentes
 
@@ -16,9 +16,13 @@ Le premier socle métier est opérationnel et testé : validation d'une opérati
 - commentaire obligatoire pour certaines catégories ;
 - calcul des revenus, des dépenses et du reste ;
 - regroupement séparé des revenus et des dépenses par catégorie ;
+- ajout, lecture, modification et suppression dans SQLite ;
+- journalisation des modifications et suppressions ;
+- lecture des opérations et des journaux par mois ;
+- premier squelette de la fenêtre mensuelle Tkinter ;
 - tests automatisés avec la bibliothèque standard.
 
-SQLite, le CRUD, le journal d'audit, la navigation mensuelle, l'interface graphique, l'export PDF et l'exécutable Windows ne sont pas encore implémentés.
+Les formulaires GUI, la navigation entre les mois, l'affichage des données réelles, l'export PDF et l'exécutable Windows ne sont pas encore implémentés.
 
 ## Stack actuelle
 
@@ -36,14 +40,22 @@ Mensora/
 ├── main.py
 ├── mensora/
 │   ├── __init__.py
-│   └── metier.py
+│   ├── metier.py
+│   ├── stockage.py
+│   └── interface/
+│       ├── __init__.py
+│       ├── application.py
+│       └── fenetre_principale.py
 └── tests/
-    └── test_metier.py
+    ├── test_interface.py
+    ├── test_metier.py
+    └── test_stockage.py
 ```
 
-- `main.py` est le point d'entrée temporaire de la démonstration ;
+- `main.py` lance l'application graphique ;
 - `mensora/metier.py` contient les règles métier testables ;
-- `tests/test_metier.py` protège les comportements déjà implémentés.
+- `mensora/stockage.py` contient la persistance SQLite et l'audit ;
+- `mensora/interface/` contient la fenêtre mensuelle Tkinter.
 
 ## Installation locale
 
@@ -60,11 +72,7 @@ py -3.13 -m venv .venv
 python .\main.py
 ```
 
-Avec les données fictives actuelles, le programme affiche :
-
-```text
-(1000, 380, 620, {'Retraite': 1000}, {'Courses': 300, 'Essence': 80})
-```
+Le lancement ouvre la fenêtre mensuelle de Mensora.
 
 ## Tests
 
@@ -78,7 +86,7 @@ Le dépôt contient uniquement du code et des données fictives. Les futures bas
 
 ## Prochaine étape
 
-Ajouter la persistance SQLite locale, en commençant par la création de la base et de la table des opérations.
+Relier la fenêtre principale aux opérations et totaux du mois, sans commencer encore les formulaires d'ajout ou de modification.
 
 ## Roadmap V1
 

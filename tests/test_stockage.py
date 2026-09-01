@@ -12,14 +12,17 @@ from mensora.stockage import (
     initialiser_base,
     ligne_vers_operation,
     lister_logs_audit_par_mois,
-    modifier_operation,
-    ouvrir_connexion,
     lister_operations,
     lister_operations_par_mois,
-    supprimer_operation,    
+    modifier_operation,
+    ouvrir_connexion,
+    supprimer_operation,
 )
 
+
 class OuvertureConnexionTests(unittest.TestCase):
+    """Tester la connexion, le CRUD, l'audit et les lectures mensuelles."""
+
     def test_ouvrir_connexion_en_memoire(self):
         connexion = ouvrir_connexion(":memory:")
 
@@ -65,8 +68,11 @@ class OuvertureConnexionTests(unittest.TestCase):
         }
         ajouter_operation(connexion, operation)
         ligne = connexion.execute(
-            "SELECT id, date, type, categorie, montant_centimes, detail FROM operations"
-            ).fetchone()
+            """
+            SELECT id, date, type, categorie, montant_centimes, detail
+            FROM operations
+            """
+        ).fetchone()
         self.assertEqual(
             ligne,
             (1, "10/08/2026", "depense", "Courses", 1050, ""),
@@ -88,7 +94,7 @@ class OuvertureConnexionTests(unittest.TestCase):
         nombre_operations = connexion.execute(
             "SELECT COUNT(*) FROM operations"
         ).fetchone()
-        self.assertEqual(nombre_operations, (0,))   
+        self.assertEqual(nombre_operations, (0,))
         connexion.close()
 
     def test_lister_operations_retourne_toutes_les_operations(self):
@@ -186,7 +192,12 @@ class OuvertureConnexionTests(unittest.TestCase):
         }
         modifier_operation(connexion, operation_id, operation_modifiee)
         ligne = connexion.execute(
-            "SELECT id, date, type, categorie, montant_centimes, detail FROM operations WHERE id = ?", (operation_id,)
+            """
+            SELECT id, date, type, categorie, montant_centimes, detail
+            FROM operations
+            WHERE id = ?
+            """,
+            (operation_id,),
         ).fetchone()
         self.assertEqual(
             ligne,
@@ -206,7 +217,7 @@ class OuvertureConnexionTests(unittest.TestCase):
             "detail": "",
         }
 
-        ajouter_operation(connexion, operation)  # Ajout d'une opération pour avoir un ID
+        ajouter_operation(connexion, operation)
 
         operation_modifiee = {
             "date": "11/08/2026",
@@ -221,7 +232,7 @@ class OuvertureConnexionTests(unittest.TestCase):
 
         operations = lister_operations(connexion)
 
-        self.assertEqual(len(operations), 1)  # Vérifie qu'il y a bien une opération
+        self.assertEqual(len(operations), 1)
 
         self.assertEqual(
             operations[0],
@@ -250,7 +261,12 @@ class OuvertureConnexionTests(unittest.TestCase):
         operation_id = ajouter_operation(connexion, operation)
         supprimer_operation(connexion, operation_id)
         ligne = connexion.execute(
-            "SELECT id, date, type, categorie, montant_centimes, detail FROM operations WHERE id = ?", (operation_id,)
+            """
+            SELECT id, date, type, categorie, montant_centimes, detail
+            FROM operations
+            WHERE id = ?
+            """,
+            (operation_id,),
         ).fetchone()
         self.assertIsNone(ligne)
         connexion.close()
@@ -265,11 +281,11 @@ class OuvertureConnexionTests(unittest.TestCase):
             "montant": Decimal("10.50"),
             "detail": "",
         }
-        ajouter_operation(connexion, operation)  # Ajout d'une opération pour avoir un ID
+        ajouter_operation(connexion, operation)
         with self.assertRaises(ValueError):
-            supprimer_operation(connexion, 999)  # ID inexistant
+            supprimer_operation(connexion, 999)
         operations = lister_operations(connexion)
-        self.assertEqual(len(operations), 1)  # Vérifie qu'il y a bien une opération
+        self.assertEqual(len(operations), 1)
         self.assertEqual(
             operations[0],
             {
@@ -281,7 +297,7 @@ class OuvertureConnexionTests(unittest.TestCase):
                 "detail": "",
             },
         )
-        connexion.close()    
+        connexion.close()
 
     def test_initialiser_base_cree_table_audit_logs(self):
         connexion = ouvrir_connexion(":memory:")
@@ -481,41 +497,6 @@ class OuvertureConnexionTests(unittest.TestCase):
         )
         connexion.close()
 
-    def supprimer_operation(connexion, operation_id):
-        """Supprimer une opération existante de la base de données."""
-
-        ligne = connexion.execute(
-            """
-            SELECT id, date, type, categorie, montant_centimes, detail
-            FROM operations
-            WHERE id = ?
-            """,
-            (operation_id,),
-        ).fetchone()
-
-        if ligne is None:
-            raise ValueError(
-                f"Aucune opération trouvée avec l'ID {operation_id}."
-            )
-
-        ancienne_operation = ligne_vers_operation(ligne)
-
-        cursor = connexion.cursor()
-        cursor.execute(
-            "DELETE FROM operations WHERE id = ?",
-            (operation_id,),
-        )
-
-        ajouter_log_audit(
-            connexion,
-            operation_id,
-            "suppression",
-            ancienne_operation,
-            None,
-        )
-
-        connexion.commit()
-
     def test_supprimer_operation_enregistre_log_audit(self):
         connexion = ouvrir_connexion(":memory:")
         initialiser_base(connexion)
@@ -706,7 +687,7 @@ class OuvertureConnexionTests(unittest.TestCase):
             2026,
             7,
         )
-        
+
         self.assertEqual(len(logs_juillet_2026), 0)
         self.assertEqual(len(logs_aout_2026), 1)
         self.assertEqual(
@@ -724,7 +705,10 @@ class OuvertureConnexionTests(unittest.TestCase):
 
         connexion.close()
 
+
 class ConversionMontantTests(unittest.TestCase):
+    """Tester les conversions exactes entre euros et centimes."""
+
     def test_convertir_montant_en_centimes(self):
         cas_valides = (
             (Decimal("10.50"), 1050),
@@ -738,6 +722,7 @@ class ConversionMontantTests(unittest.TestCase):
                     convertir_montant_en_centimes(montant),
                     centimes_attendus,
                 )
+
     def test_convertir_centimes_en_montant(self):
         cas_valides = (
             (1050, Decimal("10.50")),
