@@ -4,8 +4,13 @@ import sqlite3
 import unittest
 from decimal import Decimal
 
-from mensora.stockage import convertir_montant_en_centimes, initialiser_base, ouvrir_connexion, ajouter_operation
-
+from mensora.stockage import (
+    ajouter_operation,
+    convertir_centimes_en_montant,
+    convertir_montant_en_centimes,
+    initialiser_base,
+    ouvrir_connexion,
+)
 
 class OuvertureConnexionTests(unittest.TestCase):
     def test_ouvrir_connexion_en_memoire(self):
@@ -92,4 +97,17 @@ class ConversionMontantTests(unittest.TestCase):
                 self.assertEqual(
                     convertir_montant_en_centimes(montant),
                     centimes_attendus,
+                )
+    def test_convertir_centimes_en_montant(self):
+        cas_valides = (
+            (1050, Decimal("10.50")),
+            (1000, Decimal("10.00")),
+            (1, Decimal("0.01")),
+        )
+
+        for centimes, montant_attendu in cas_valides:
+            with self.subTest(centimes=centimes):
+                self.assertEqual(
+                    convertir_centimes_en_montant(centimes),
+                    montant_attendu,
                 )

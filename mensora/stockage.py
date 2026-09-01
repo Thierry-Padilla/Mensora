@@ -1,5 +1,6 @@
 """Accès à la base de données SQLite locale de Mensora."""
 
+from decimal import Decimal
 import sqlite3
 from mensora.metier import normaliser_montant, valider_operation
 
@@ -28,6 +29,10 @@ def initialiser_base(connexion):
 def convertir_montant_en_centimes(montant):
     """Convertir un montant Decimal normalisé en nombre entier de centimes."""
     return int(montant * 100)
+
+def convertir_centimes_en_montant(centimes):
+    """Convertir un nombre entier de centimes en montant Decimal normalisé."""
+    return normaliser_montant(Decimal(centimes) / 100)
 
 def ajouter_operation(connexion, operation):
     """Ajouter une opération à la base de données."""
