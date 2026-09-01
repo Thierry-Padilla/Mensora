@@ -9,7 +9,9 @@ from mensora.stockage import (
     convertir_centimes_en_montant,
     convertir_montant_en_centimes,
     initialiser_base,
+    ligne_vers_operation,
     ouvrir_connexion,
+    lister_operations,
 )
 
 class OuvertureConnexionTests(unittest.TestCase):
@@ -82,6 +84,81 @@ class OuvertureConnexionTests(unittest.TestCase):
             "SELECT COUNT(*) FROM operations"
         ).fetchone()
         self.assertEqual(nombre_operations, (0,))   
+        connexion.close()
+
+    def test_lister_operations_retourne_toutes_les_operations(self):
+        connexion = ouvrir_connexion(":memory:")
+        initialiser_base(connexion)
+        operations = [
+            {
+                "date": "10/08/2026",
+                "type": "depense",
+                "categorie": "Courses",
+                "montant": Decimal("10.50"),
+                "detail": "",
+            },
+            {
+                "date": "11/08/2026",
+                "type": "revenu",
+                "categorie": "Retraite",
+                "montant": Decimal("1000.00"),
+                "detail": "",
+            },
+        ]
+        for operation in operations:
+            ajouter_operation(connexion, operation)
+        lignes = lister_operations(connexion)
+        self.assertEqual(len(lignes), 2)
+        self.assertEqual(
+            lignes[0],
+            {
+                "id": 1,
+                "date": "10/08/2026",
+                "type": "depense",
+                "categorie": "Courses",
+                "montant": Decimal("10.50"),
+                "detail": "",
+            },
+        )
+        self.assertEqual(
+            lignes[1],
+            {
+                "id": 2,
+                "date": "11/08/2026",
+                "type": "revenu",
+                "categorie": "Retraite",
+                "montant": Decimal("1000.00"),
+                "detail": "",
+            },
+        )
+        connexion.close()
+
+    def test_ligne_vers_operation_convertit_ligne_sqlite(self):
+        connexion = ouvrir_connexion(":memory:")
+        initialiser_base(connexion)
+        operation = {
+            "date": "10/08/2026",
+            "type": "depense",
+            "categorie": "Courses",
+            "montant": 10.50,
+            "detail": "",
+        }
+        ajouter_operation(connexion, operation)
+        ligne = connexion.execute(
+            "SELECT id, date, type, categorie, montant_centimes, detail FROM operations"
+        ).fetchone()
+        operation_convertie = ligne_vers_operation(ligne)
+        self.assertEqual(
+            operation_convertie,
+            {
+                "id": 1,
+                "date": "10/08/2026",
+                "type": "depense",
+                "categorie": "Courses",
+                "montant": Decimal("10.50"),
+                "detail": "",
+            },
+        )
         connexion.close()
 
 class ConversionMontantTests(unittest.TestCase):

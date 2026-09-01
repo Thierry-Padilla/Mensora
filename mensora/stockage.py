@@ -58,3 +58,30 @@ def ajouter_operation(connexion, operation):
     )
     connexion.commit()
     return connexion_cursor.lastrowid  # Retourne l'ID de la dernière opération insérée
+
+def lister_operations(connexion):
+    """Lister toutes les opérations de la base de données."""
+    cursor = connexion.cursor()
+    cursor.execute("""
+        SELECT id, date, type, categorie, montant_centimes, detail
+        FROM operations
+        ORDER BY id
+    """)
+    lignes= cursor.fetchall()
+    operations = []
+
+    for ligne in lignes:
+        operation = ligne_vers_operation(ligne)
+        operations.append(operation)
+    return operations
+
+def ligne_vers_operation(ligne):
+    """Convertir une ligne de la base de données en dictionnaire d'opération."""
+    return {
+        "id": ligne[0],
+        "date": ligne[1],
+        "type": ligne[2],
+        "categorie": ligne[3],
+        "montant": convertir_centimes_en_montant(ligne[4]),
+        "detail": ligne[5],
+    }
