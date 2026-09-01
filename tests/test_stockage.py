@@ -13,6 +13,7 @@ from mensora.stockage import (
     modifier_operation,
     ouvrir_connexion,
     lister_operations,
+    supprimer_operation,
 )
 
 class OuvertureConnexionTests(unittest.TestCase):
@@ -232,6 +233,52 @@ class OuvertureConnexionTests(unittest.TestCase):
         )
 
         connexion.close()
+
+    def test_supprimer_operation_supprime_operation_existante(self):
+        connexion = ouvrir_connexion(":memory:")
+        initialiser_base(connexion)
+        operation = {
+            "date": "10/08/2026",
+            "type": "depense",
+            "categorie": "Courses",
+            "montant": Decimal("10.50"),
+            "detail": "",
+        }
+        operation_id = ajouter_operation(connexion, operation)
+        supprimer_operation(connexion, operation_id)
+        ligne = connexion.execute(
+            "SELECT id, date, type, categorie, montant_centimes, detail FROM operations WHERE id = ?", (operation_id,)
+        ).fetchone()
+        self.assertIsNone(ligne)
+        connexion.close()
+
+    def test_supprimer_operation_refuse_id_inexistant(self):
+        connexion = ouvrir_connexion(":memory:")
+        initialiser_base(connexion)
+        operation = {
+            "date": "10/08/2026",
+            "type": "depense",
+            "categorie": "Courses",
+            "montant": Decimal("10.50"),
+            "detail": "",
+        }
+        ajouter_operation(connexion, operation)  # Ajout d'une opération pour avoir un ID
+        with self.assertRaises(ValueError):
+            supprimer_operation(connexion, 999)  # ID inexistant
+        operations = lister_operations(connexion)
+        self.assertEqual(len(operations), 1)  # Vérifie qu'il y a bien une opération
+        self.assertEqual(
+            operations[0],
+            {
+                "id": 1,
+                "date": "10/08/2026",
+                "type": "depense",
+                "categorie": "Courses",
+                "montant": Decimal("10.50"),
+                "detail": "",
+            },
+        )
+        connexion.close()    
 
 class ConversionMontantTests(unittest.TestCase):
     def test_convertir_montant_en_centimes(self):

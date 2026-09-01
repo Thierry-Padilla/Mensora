@@ -113,3 +113,11 @@ def modifier_operation(connexion, operation_id, nouvelle_operation):
     if cursor.rowcount == 0:
         raise ValueError(f"Aucune opération trouvée avec l'ID {operation_id}.")
     connexion.commit()
+
+def supprimer_operation(connexion, operation_id):
+    """Supprimer une opération existante de la base de données."""
+    cursor = connexion.cursor()
+    cursor.execute("DELETE FROM operations WHERE id = ?", (operation_id,))
+    if cursor.rowcount == 0:
+        raise ValueError(f"Aucune opération trouvée avec l'ID {operation_id}.")
+    connexion.commit()
