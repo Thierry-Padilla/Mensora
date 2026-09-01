@@ -85,3 +85,31 @@ def ligne_vers_operation(ligne):
         "montant": convertir_centimes_en_montant(ligne[4]),
         "detail": ligne[5],
     }
+
+def modifier_operation(connexion, operation_id, nouvelle_operation):
+    """Modifier une opération existante dans la base de données."""
+    # Valider la nouvelle opération avant de la modifier
+    valide, message = valider_operation(nouvelle_operation)
+    if not valide:
+        raise ValueError(f"Nouvelle opération invalide: {message}")
+
+    montant_centimes = convertir_montant_en_centimes(normaliser_montant(nouvelle_operation["montant"]))
+    cursor = connexion.cursor()
+    cursor.execute(
+        """
+        UPDATE operations
+        SET date = ?, type = ?, categorie = ?, montant_centimes = ?, detail = ?
+        WHERE id = ?
+        """,
+        (
+            nouvelle_operation["date"],
+            nouvelle_operation["type"],
+            nouvelle_operation["categorie"],
+            montant_centimes,
+            nouvelle_operation.get("detail", ""),
+            operation_id
+        )
+    )
+    if cursor.rowcount == 0:
+        raise ValueError(f"Aucune opération trouvée avec l'ID {operation_id}.")
+    connexion.commit()

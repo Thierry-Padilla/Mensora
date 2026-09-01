@@ -10,6 +10,7 @@ from mensora.stockage import (
     convertir_montant_en_centimes,
     initialiser_base,
     ligne_vers_operation,
+    modifier_operation,
     ouvrir_connexion,
     lister_operations,
 )
@@ -140,7 +141,7 @@ class OuvertureConnexionTests(unittest.TestCase):
             "date": "10/08/2026",
             "type": "depense",
             "categorie": "Courses",
-            "montant": 10.50,
+            "montant": Decimal("10.50"),
             "detail": "",
         }
         ajouter_operation(connexion, operation)
@@ -159,6 +160,77 @@ class OuvertureConnexionTests(unittest.TestCase):
                 "detail": "",
             },
         )
+        connexion.close()
+
+    def test_modifier_operation_met_a_jour_operation_existante(self):
+        connexion = ouvrir_connexion(":memory:")
+        initialiser_base(connexion)
+        operation = {
+            "date": "10/08/2026",
+            "type": "depense",
+            "categorie": "Courses",
+            "montant": Decimal("10.50"),
+            "detail": "",
+        }
+        operation_id = ajouter_operation(connexion, operation)
+        operation_modifiee = {
+            "date": "11/08/2026",
+            "type": "depense",
+            "categorie": "Courses",
+            "montant": Decimal("20.00"),
+            "detail": "",
+        }
+        modifier_operation(connexion, operation_id, operation_modifiee)
+        ligne = connexion.execute(
+            "SELECT id, date, type, categorie, montant_centimes, detail FROM operations WHERE id = ?", (operation_id,)
+        ).fetchone()
+        self.assertEqual(
+            ligne,
+            (1, "11/08/2026", "depense", "Courses", 2000, ""),
+        )
+        connexion.close()
+
+    def test_modifier_operation_refuse_id_inexistant(self):
+        connexion = ouvrir_connexion(":memory:")
+        initialiser_base(connexion)
+
+        operation = {
+            "date": "10/08/2026",
+            "type": "depense",
+            "categorie": "Courses",
+            "montant": Decimal("10.50"),
+            "detail": "",
+        }
+
+        ajouter_operation(connexion, operation)  # Ajout d'une opération pour avoir un ID
+
+        operation_modifiee = {
+            "date": "11/08/2026",
+            "type": "depense",
+            "categorie": "Courses",
+            "montant": Decimal("20.00"),
+            "detail": "",
+        }
+
+        with self.assertRaises(ValueError):
+            modifier_operation(connexion, 999, operation_modifiee)
+
+        operations = lister_operations(connexion)
+
+        self.assertEqual(len(operations), 1)  # Vérifie qu'il y a bien une opération
+
+        self.assertEqual(
+            operations[0],
+            {
+                "id": 1,
+                "date": "10/08/2026",
+                "type": "depense",
+                "categorie": "Courses",
+                "montant": Decimal("10.50"),
+                "detail": "",
+            },
+        )
+
         connexion.close()
 
 class ConversionMontantTests(unittest.TestCase):
