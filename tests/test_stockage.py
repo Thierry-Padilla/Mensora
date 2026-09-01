@@ -14,7 +14,8 @@ from mensora.stockage import (
     modifier_operation,
     ouvrir_connexion,
     lister_operations,
-    supprimer_operation,
+    lister_operations_par_mois,
+    supprimer_operation,    
 )
 
 class OuvertureConnexionTests(unittest.TestCase):
@@ -513,7 +514,7 @@ class OuvertureConnexionTests(unittest.TestCase):
         )
 
         connexion.commit()
-        
+
     def test_supprimer_operation_enregistre_log_audit(self):
         connexion = ouvrir_connexion(":memory:")
         initialiser_base(connexion)
@@ -556,6 +557,65 @@ class OuvertureConnexionTests(unittest.TestCase):
             ),
         )
         connexion.close()
+
+    def test_lister_operations_par_mois_filtre_annee_et_mois(self):
+        connexion = ouvrir_connexion(":memory:")
+        initialiser_base(connexion)
+
+        operations = [
+            {
+                "date": "10/08/2026",
+                "type": "depense",
+                "categorie": "Courses",
+                "montant": Decimal("10.50"),
+                "detail": "",
+            },
+            {
+                "date": "11/08/2026",
+                "type": "revenu",
+                "categorie": "Retraite",
+                "montant": Decimal("1000.00"),
+                "detail": "",
+            },
+            {
+                "date": "15/07/2026",
+                "type": "depense",
+                "categorie": "Courses",
+                "montant": Decimal("50.00"),
+                "detail": "",
+            },
+            {
+                "date": "10/08/2025",
+                "type": "depense",
+                "categorie": "Courses",
+                "montant": Decimal("25.00"),
+                "detail": "",
+            },
+]
+
+        for operation in operations:
+            ajouter_operation(connexion, operation)
+
+        lignes_aout_2026 = lister_operations_par_mois(
+            connexion,
+            2026,
+            8,
+        )
+
+        self.assertEqual(len(lignes_aout_2026), 2)
+        self.assertEqual(
+            lignes_aout_2026[0]["date"],
+            "10/08/2026",
+        )
+        self.assertEqual(
+            lignes_aout_2026[1]["date"],
+            "11/08/2026",
+        )
+
+        connexion.close()
+
+
+
 
 class ConversionMontantTests(unittest.TestCase):
     def test_convertir_montant_en_centimes(self):

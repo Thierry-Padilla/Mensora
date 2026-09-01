@@ -306,3 +306,26 @@ def ajouter_log_audit(
             nouveau_detail,
         ),
     )
+
+def lister_operations_par_mois(connexion, annee, mois):
+    """Lister les opérations correspondant à un mois et une année."""
+
+    cursor = connexion.cursor()
+    cursor.execute(
+        """
+        SELECT id, date, type, categorie, montant_centimes, detail
+        FROM operations
+        WHERE substr(date, 7, 4) = ?
+          AND substr(date, 4, 2) = ?
+        ORDER BY id
+        """,
+        (
+            str(annee),
+            f"{mois:02d}",
+        ),
+    )
+
+    return [
+        ligne_vers_operation(ligne)
+        for ligne in cursor.fetchall()
+    ]
