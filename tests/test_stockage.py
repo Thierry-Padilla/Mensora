@@ -11,6 +11,7 @@ from mensora.stockage import (
     convertir_montant_en_centimes,
     initialiser_base,
     ligne_vers_operation,
+    lister_logs_audit_par_mois,
     modifier_operation,
     ouvrir_connexion,
     lister_operations,
@@ -614,8 +615,114 @@ class OuvertureConnexionTests(unittest.TestCase):
 
         connexion.close()
 
+    def test_lister_logs_audit_par_mois_filtre_mois_concernes(self):
+        connexion = ouvrir_connexion(":memory:")
+        initialiser_base(connexion)
 
+        operation = {
+            "date": "10/08/2026",
+            "type": "depense",
+            "categorie": "Courses",
+            "montant": Decimal("10.50"),
+            "detail": "",
+        }
 
+        operation_id = ajouter_operation(connexion, operation)
+
+        nouvelle_operation = {
+            "date": "05/07/2026",
+            "type": "depense",
+            "categorie": "Courses",
+            "montant": Decimal("20.00"),
+            "detail": "",
+        }
+
+        modifier_operation(
+            connexion,
+            operation_id,
+            nouvelle_operation,
+        )
+        logs_juin_2026 = lister_logs_audit_par_mois(
+            connexion,
+            2026,
+            6,
+        )
+
+        self.assertEqual(len(logs_juin_2026), 0)
+
+        logs_juillet_2026 = lister_logs_audit_par_mois(
+            connexion,
+            2026,
+            7,
+        )
+
+        self.assertEqual(len(logs_juillet_2026), 1)
+        self.assertEqual(
+            logs_juillet_2026[0]["action"],
+            "modification",
+        )
+
+        logs_aout_2026 = lister_logs_audit_par_mois(
+            connexion,
+            2026,
+            8,
+        )
+
+        self.assertEqual(len(logs_aout_2026), 1)
+        self.assertEqual(
+            logs_aout_2026[0]["ancienne_date"],
+            "10/08/2026",
+        )
+        self.assertEqual(
+            logs_aout_2026[0]["nouvelle_date"],
+            "05/07/2026",
+        )
+
+        connexion.close()
+
+    def test_lister_logs_audit_par_mois_inclut_suppression_du_mois(self):
+        connexion = ouvrir_connexion(":memory:")
+        initialiser_base(connexion)
+
+        operation = {
+            "date": "10/08/2026",
+            "type": "depense",
+            "categorie": "Courses",
+            "montant": Decimal("10.50"),
+            "detail": "",
+        }
+
+        operation_id = ajouter_operation(connexion, operation)
+
+        supprimer_operation(connexion, operation_id)
+
+        logs_aout_2026 = lister_logs_audit_par_mois(
+            connexion,
+            2026,
+            8,
+        )
+        logs_juillet_2026 = lister_logs_audit_par_mois(
+            connexion,
+            2026,
+            7,
+        )
+        
+        self.assertEqual(len(logs_juillet_2026), 0)
+        self.assertEqual(len(logs_aout_2026), 1)
+        self.assertEqual(
+            logs_aout_2026[0]["action"],
+            "suppression",
+        )
+        self.assertEqual(
+            logs_aout_2026[0]["ancienne_date"],
+            "10/08/2026",
+        )
+
+        self.assertIsNone(
+            logs_aout_2026[0]["nouvelle_date"]
+        )
+
+        connexion.close()
 
 class ConversionMontantTests(unittest.TestCase):
     def test_convertir_montant_en_centimes(self):

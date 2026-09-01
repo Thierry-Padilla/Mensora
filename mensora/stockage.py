@@ -329,3 +329,109 @@ def lister_operations_par_mois(connexion, annee, mois):
         ligne_vers_operation(ligne)
         for ligne in cursor.fetchall()
     ]
+
+def lister_logs_audit_par_mois(connexion, annee, mois):
+    """Lister les logs d'audit concernant un mois et une année."""
+
+    cursor = connexion.cursor()
+    cursor.execute(
+        """
+        SELECT
+            id,
+            operation_id,
+            action,
+            date_action,
+            ancienne_date,
+            ancien_type,
+            ancienne_categorie,
+            ancien_montant_centimes,
+            ancien_detail,
+            nouvelle_date,
+            nouveau_type,
+            nouvelle_categorie,
+            nouveau_montant_centimes,
+            nouveau_detail
+        FROM audit_logs
+        WHERE (
+            substr(ancienne_date, 7, 4) = ?
+            AND substr(ancienne_date, 4, 2) = ?
+        )
+        OR (
+            nouvelle_date IS NOT NULL
+            AND substr(nouvelle_date, 7, 4) = ?
+            AND substr(nouvelle_date, 4, 2) = ?
+        )
+        ORDER BY id
+        """,
+        (
+            str(annee),
+            f"{mois:02d}",
+            str(annee),
+            f"{mois:02d}",
+        ),
+    )
+    lignes = cursor.fetchall()
+
+    return [
+        ligne_vers_log_audit(ligne)
+        for ligne in lignes
+    ]
+    cursor.execute(
+        """
+        SELECT
+            id,
+            operation_id,
+            action,
+            date_action,
+            ancienne_date,
+            ancien_type,
+            ancienne_categorie,
+            ancien_montant_centimes,
+            ancien_detail,
+            nouvelle_date,
+            nouveau_type,
+            nouvelle_categorie,
+            nouveau_montant_centimes,
+            nouveau_detail
+        FROM audit_logs
+        WHERE (
+            substr(ancienne_date, 7, 4) = ?
+            AND substr(ancienne_date, 4, 2) = ?
+        )
+        OR (
+            nouvelle_date IS NOT NULL
+            AND substr(nouvelle_date, 7, 4) = ?
+            AND substr(nouvelle_date, 4, 2) = ?
+        )
+        ORDER BY id
+        """,
+        (
+            str(annee),
+            f"{mois:02d}",
+            str(annee),
+            f"{mois:02d}",
+        ),
+    )
+
+def ligne_vers_log_audit(ligne):
+    """Convertir une ligne SQLite en dictionnaire de log d'audit."""
+    return {
+        "id": ligne[0],
+        "operation_id": ligne[1],
+        "action": ligne[2],
+        "date_action": ligne[3],
+        "ancienne_date": ligne[4],
+        "ancien_type": ligne[5],
+        "ancienne_categorie": ligne[6],
+        "ancien_montant": convertir_centimes_en_montant(ligne[7]),
+        "ancien_detail": ligne[8],
+        "nouvelle_date": ligne[9],
+        "nouveau_type": ligne[10],
+        "nouvelle_categorie": ligne[11],
+        "nouveau_montant": (
+            convertir_centimes_en_montant(ligne[12])
+            if ligne[12] is not None
+            else None
+        ),
+        "nouveau_detail": ligne[13],
+    }
