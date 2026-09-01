@@ -17,10 +17,12 @@ Backend pédagogique initial : règles métier isolées et tests automatisés.
 - quatre opérations fictives sont définies dans `main.py` pour la démonstration ;
 - `valider_operation(operation)` applique le contrat de validation actuel ;
 - `calculer_totaux(operations)` produit les résultats attendus pour le scénario initial ;
+- les totaux par catégorie sont séparés entre revenus et dépenses ;
+- les montants valides sont normalisés en `Decimal` avec deux décimales au maximum ;
 - les règles métier sont isolées dans `mensora/metier.py` et couvertes par `unittest` ;
 - la persistance SQLite n'est pas commencée.
 
-Prochaine étape unique : séparer les totaux par catégorie de revenus et de dépenses sans modifier les autres contrats.
+Prochaine étape unique : créer la base SQLite locale et la table des opérations, sans commencer encore le CRUD complet.
 
 ## Priorité
 

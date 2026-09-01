@@ -4,7 +4,7 @@ import unittest
 from datetime import date, timedelta
 from decimal import Decimal
 
-from mensora.metier import calculer_totaux, valider_operation
+from mensora.metier import calculer_totaux, normaliser_montant, valider_operation
 
 
 class ValidationOperationTests(unittest.TestCase):
@@ -63,8 +63,8 @@ class ValidationOperationTests(unittest.TestCase):
                     (True, ""),
                 )
 
-    def test_montants_non_numeriques_sont_refuses(self):
-        for montant in ("abc", "NaN", "Infinity"):
+    def test_montants_invalides_sont_refuses(self):
+        for montant in ("abc", "NaN", "Infinity", "10,999"):
             with self.subTest(montant=montant):
                 self.assertEqual(
                     valider_operation(self.operation_valide(montant=montant)),
@@ -111,11 +111,17 @@ class CalculTotauxTests(unittest.TestCase):
 
         self.assertEqual(
             calculer_totaux(operations),
-            (1000, 380, 620, {"Courses": 300, "Essence": 80}),
+            (
+                1000,
+                380,
+                620,
+                {"Retraite": 1000},
+                {"Courses": 300, "Essence": 80},
+            ),
         )
 
     def test_liste_vide(self):
-        self.assertEqual(calculer_totaux([]), (0, 0, 0, {}))
+        self.assertEqual(calculer_totaux([]), (0, 0, 0, {}, {}))
 
     def test_calculs_decimal_sont_exacts(self):
         operations = [
@@ -142,9 +148,57 @@ class CalculTotauxTests(unittest.TestCase):
                 Decimal("1000.50"),
                 Decimal("0.30"),
                 Decimal("1000.20"),
+                {"Retraite": Decimal("1000.50")},
                 {"Courses": Decimal("0.30")},
             ),
         )
+
+    def test_totaux_par_categorie_separes(self):
+        operations = [
+            {"type": "revenu", "categorie": "Retraite", "montant": 1000},
+            {"type": "revenu", "categorie": "Retraite", "montant": 100},
+            {"type": "revenu", "categorie": "Divers", "montant": 50},
+            {"type": "depense", "categorie": "Essence", "montant": 50},
+            {"type": "depense", "categorie": "Courses", "montant": 300},
+        ]
+
+        self.assertEqual(
+            calculer_totaux(operations),
+            (
+                1150,
+                350,
+                800,
+                {"Retraite": 1100, "Divers": 50},
+                {"Essence": 50, "Courses": 300},
+            ),
+        )
+
+
+class NormalisationMontantTests(unittest.TestCase):
+    def test_normalisation_valide(self):
+        cas_valides = [
+            ("10", "10.00"),
+            ("10,5", "10.50"),
+            ("10.50", "10.50"),
+        ]
+        for saisie, attendu in cas_valides:
+            with self.subTest(saisie=saisie):
+                resultat = normaliser_montant(saisie)
+                self.assertIsInstance(resultat, Decimal)
+                self.assertEqual(str(resultat), attendu)
+
+    def test_normalisation_invalide_retourne_none(self):
+        valeurs_invalides = (
+            None,
+            "",
+            "abc",
+            "NaN",
+            "Infinity",
+            "10,999",
+        )
+        for saisie in valeurs_invalides:
+            with self.subTest(saisie=saisie):
+                self.assertIsNone(normaliser_montant(saisie))
 
 
 if __name__ == "__main__":

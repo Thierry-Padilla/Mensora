@@ -32,6 +32,25 @@ CATEGORIES_DETAIL_OBLIGATOIRE = (
 )
 
 
+def normaliser_montant(montant):
+    """Convertir le montant en Decimal, en acceptant la virgule française.
+
+    La fonction retourne un Decimal à deux décimales, ou None si la valeur
+    n'est pas un nombre fini valide ou comporte plus de deux décimales.
+    """
+    texte_montant = str(montant).replace(",", ".")
+    try:
+        montant_decimal = Decimal(texte_montant)
+        if not montant_decimal.is_finite():
+            return None
+
+        if montant_decimal.as_tuple().exponent < -2:
+            return None
+        return montant_decimal.quantize(Decimal("0.01"))
+    except (InvalidOperation, TypeError):
+        return None
+
+
 def valider_operation(operation):
     """Valider une opération sans la modifier.
 
@@ -63,13 +82,8 @@ def valider_operation(operation):
     if montant_operation in (None, ""):
         return (False, "Le montant est obligatoire.")
 
-    try:
-        # L'interface acceptera la virgule française comme séparateur décimal.
-        montant_converti = Decimal(str(montant_operation).replace(",", "."))
-    except InvalidOperation:
-        return (False, "Le montant doit être un nombre valide.")
-
-    if not montant_converti.is_finite():
+    montant_converti = normaliser_montant(montant_operation)
+    if montant_converti is None:
         return (False, "Le montant doit être un nombre valide.")
 
     if montant_converti <= 0:
@@ -86,26 +100,38 @@ def valider_operation(operation):
 def calculer_totaux(operations):
     """Calculer les totaux à partir des opérations, source de vérité.
 
-    Le regroupement par catégorie concerne actuellement les dépenses. Le
-    regroupement équivalent des revenus reste la prochaine évolution métier.
+    Les revenus et les dépenses sont regroupés séparément par catégorie.
     """
 
     total_revenu = 0
     total_depense = 0
-    total_categorie = {}
+    totaux_categories_revenus = {}
+    totaux_categories_depenses = {}
 
     for operation in operations:
         if operation["type"] == "revenu":
             total_revenu += operation["montant"]
+            categorie = operation["categorie"]
+            montant = operation["montant"]
+            if categorie in totaux_categories_revenus:
+                totaux_categories_revenus[categorie] += montant
+            else:
+                totaux_categories_revenus[categorie] = montant
 
         elif operation["type"] == "depense":
             total_depense += operation["montant"]
             categorie = operation["categorie"]
             montant = operation["montant"]
-            if categorie in total_categorie:
-                total_categorie[categorie] += montant
+            if categorie in totaux_categories_depenses:
+                totaux_categories_depenses[categorie] += montant
             else:
-                total_categorie[categorie] = montant
+                totaux_categories_depenses[categorie] = montant
 
     reste = total_revenu - total_depense
-    return total_revenu, total_depense, reste, total_categorie
+    return (
+        total_revenu,
+        total_depense,
+        reste,
+        totaux_categories_revenus,
+        totaux_categories_depenses,
+    )

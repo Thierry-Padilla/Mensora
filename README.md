@@ -6,16 +6,16 @@ Mensora est une application Python locale destinée à simplifier la gestion d'u
 
 Projet pédagogique en développement backend. Mensora n'est pas encore une application utilisable ni une V1 terminée.
 
-Le premier socle métier est opérationnel et testé : validation d'une opération, calcul des revenus, calcul des dépenses, calcul du reste et regroupement des dépenses par catégorie.
+Le premier socle métier est opérationnel et testé : validation d'une opération, calcul des revenus, calcul des dépenses, calcul du reste et regroupement séparé des revenus et des dépenses par catégorie.
 
 ## Fonctionnalités actuellement présentes
 
 - validation des dates, avec refus des dates futures ;
 - validation des types et des catégories autorisées ;
-- validation des montants positifs avec prise en charge des centimes ;
+- normalisation exacte des montants positifs avec deux décimales au maximum ;
 - commentaire obligatoire pour certaines catégories ;
 - calcul des revenus, des dépenses et du reste ;
-- regroupement des dépenses par catégorie ;
+- regroupement séparé des revenus et des dépenses par catégorie ;
 - tests automatisés avec la bibliothèque standard.
 
 SQLite, le CRUD, le journal d'audit, la navigation mensuelle, l'interface graphique, l'export PDF et l'exécutable Windows ne sont pas encore implémentés.
@@ -63,7 +63,7 @@ python .\main.py
 Avec les données fictives actuelles, le programme affiche :
 
 ```text
-(1000, 380, 620, {'Courses': 300, 'Essence': 80})
+(1000, 380, 620, {'Retraite': 1000}, {'Courses': 300, 'Essence': 80})
 ```
 
 ## Tests
@@ -78,7 +78,7 @@ Le dépôt contient uniquement du code et des données fictives. Les futures bas
 
 ## Prochaine étape
 
-Faire évoluer les calculs pour regrouper séparément les catégories de revenus et de dépenses, puis normaliser les montants validés avant la persistance.
+Ajouter la persistance SQLite locale, en commençant par la création de la base et de la table des opérations.
 
 ## Roadmap V1
 
